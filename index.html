@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OOPverse | Officer Edition v9</title>
+    
+    <!-- React & DOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        cyber: {
+                            black: '#050505',
+                            dark: '#0f0f0f',
+                            gray: '#18181b',
+                            light: '#27272a',
+                            accent: '#8b5cf6', // Violet
+                            neon: '#00f3ff',   // Cyan
+                            pink: '#ff0099',   // Hot Pink
+                            error: '#ff2a6d',  // Glitch Red
+                            success: '#00ff9d', // Matrix Green
+                            warning: '#facc15'  // Yellow
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
+                        sans: ['"Inter"', 'sans-serif']
+                    },
+                    animation: {
+                        'float': 'float 6s ease-in-out infinite',
+                        'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'glitch': 'glitch 1s linear infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Icons & Fonts -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        body { background-color: #050505; color: #e0e0e0; font-family: 'Inter', sans-serif; overflow: hidden; }
+        .glass { background: rgba(20, 20, 20, 0.9); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .neon-glow { text-shadow: 0 0 10px rgba(112, 0, 255, 0.6); }
+        .neon-text-cyan { text-shadow: 0 0 8px rgba(0, 243, 255, 0.6); }
+        
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0a0a0a; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #7000ff; }
+        
+        .prose h3 { color: #00f3ff; font-size: 1.4rem; font-weight: 800; margin-top: 2rem; margin-bottom: 1rem; letter-spacing: -0.02em; }
+        .prose h4 { color: #ff0099; font-size: 1.1rem; font-weight: 700; margin-top: 1.5rem; margin-bottom: 0.5rem; }
+        .prose p { color: #b0b0b0; margin-bottom: 1.2rem; line-height: 1.7; font-size: 1.05rem; }
+        .prose ul { list-style: none; padding-left: 0; margin-bottom: 1.5rem; }
+        .prose li { position: relative; padding-left: 1.5rem; margin-bottom: 0.5rem; color: #ccc; }
+        .prose li::before { content: '>'; color: #7000ff; position: absolute; left: 0; font-weight: bold; }
+        .prose code { background: #1a1a1a; color: #ff0099; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: 'JetBrains Mono'; font-size: 0.9em; }
+        .prose strong { color: #fff; }
+        
+        .game-card { perspective: 1000px; }
+        .game-card-inner { transition: transform 0.6s; transform-style: preserve-3d; }
+        .game-card.flipped .game-card-inner { transform: rotateY(180deg); }
+        .game-card-front, .game-card-back { backface-visibility: hidden; position: absolute; inset: 0; }
+        .game-card-back { transform: rotateY(180deg); }
+
+        .scanline {
+            width: 100%;
+            height: 100px;
+            z-index: 10;
+            background: linear-gradient(0deg, rgba(0,0,0,0) 0%, rgba(112, 0, 255, 0.1) 50%, rgba(0,0,0,0) 100%);
+            opacity: 0.1;
+            position: absolute;
+            bottom: 100%;
+            animation: scanline 10s linear infinite;
+            pointer-events: none;
+        }
+        @keyframes scanline {
+            0% { bottom: 100%; }
+            100% { bottom: -100%; }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        // --- HELPER: GEMINI API CALL ---
+        const callGemini = async (promptText, userKey) => {
+            if (!userKey) throw new Error("Missing API Key");
+            
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${userKey}`;
+            const systemInstruction = "You are the OOP Officer, a strict, sarcastic, but extremely knowledgeable C++ Object Oriented Programming instructor. You roast the user for bad code but explain concepts clearly. Keep answers concise.";
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: "User asks: " + promptText }] }],
+                        systemInstruction: { parts: [{ text: systemInstruction }] }
+                    })
+                });
+                
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error?.message || "API Failed");
+                }
+                
+                const data = await response.json();
+                return data.candidates?.[0]?.content?.parts?.[0]?.text || "No response generated.";
+            } catch (error) {
+                console.error("Gemini Error:", error);
+                throw error;
+            }
+        };
+
+        // --- DATA: EXTENSIVE LECTURE CONTENT (SARCASTIC & DETAILED) ---
+        const lectures = [
+            {
+                id: 1, title: "Intro to OOP", icon: "fa-cube",
+                image: "https://images.unsplash.com/photo-1555949963-ff9fe0c870eb?auto=format&fit=crop&q=80&w=800",
+                sarcasm: "Welcome to OOP. It's like regular programming, but we decided to make it complicated so we can charge clients more.",
+                tip: "Remember PIIE: Polymorphism, Inheritance, Instantiation, Encapsulation. If you forget this, just drop the class.",
+                theory: `
+                    <h3>What is OOP?</h3>
+                    <p>Object-Oriented Programming (OOP) shifts the focus from logic (functions) to data (objects). In unstructured programming, code is a mess—like your room. In Structured programming (C), we use functions, which is like shoving everything into drawers but still losing your socks.</p>
+                    <p>In OOP, we create <strong>Objects</strong>. An object contains both the socks (data) and the ability to put them on (methods). It's a self-contained unit of misery... I mean, functionality.</p>
+
+                    <h3>The 4 Pillars (PIIE)</h3>
+                    <ul>
+                        <li><strong>Polymorphism:</strong> The ability of a message to be displayed in more than one form. Like how your personality changes depending on who you're talking to.</li>
+                        <li><strong>Inheritance:</strong> Reusability. Just like you inherited your dad's nose, a Child class inherits properties from a Parent class.</li>
+                        <li><strong>Instantiation:</strong> The act of creating an object from a class (Blueprint).</li>
+                        <li><strong>Encapsulation:</strong> Wrapping data and methods into a single unit. It's about hiding your dirty laundry (private data) from the neighbors (other classes).</li>
+                    </ul>
+                `,
+                code: `class Human {\nprivate:\n  int iq; // Private: Nobody needs to know\npublic:\n  void speak() { cout << "Hello"; }\n};`,
+                links: {
+                    desi: "https://www.youtube.com/watch?v=nGJTWaaFdjc", 
+                    borgir: "https://www.youtube.com/watch?v=0NwsayeOsd4" 
+                },
+                challenge: { desc: "Create a class 'Dog' with private 'age'.", start: "class Dog {\n  // Code\n};", regex: /private:.*age/s }
+            },
+            {
+                id: 2, title: "Functions & Overloading", icon: "fa-code",
+                image: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
+                sarcasm: "Function Overloading: Because thinking of two different names for 'print' was apparently too hard for developers.",
+                tip: "Changing ONLY the return type is NOT overloading. The compiler isn't psychic; it needs different parameters to tell them apart.",
+                theory: `
+                    <h3>Function Basics</h3>
+                    <p>A function is a block of code that runs when called. The prototype (declaration) tells the compiler "Hey, trust me, this function exists somewhere."</p>
+
+                    <h3>Parameter Passing</h3>
+                    <ul>
+                        <li><strong>By Value:</strong> You give the function a photocopy of your homework. If they burn it, your original is safe.</li>
+                        <li><strong>By Reference (&):</strong> You give the function your actual homework. If they burn it, you fail.</li>
+                    </ul>
+
+                    <h3>Function Overloading</h3>
+                    <p>Using the same name for multiple functions. <br/><code>void area(int r)</code> (Circle) vs <code>void area(int l, int w)</code> (Rectangle). The compiler decides which one to call based on the arguments. It's smart, unlike some students.</p>
+                `,
+                code: `void punch(int force) { ... }\nvoid punch(string insult) { ... }\n// Compiler knows which punch to use`,
+                links: {
+                    desi: "https://www.youtube.com/watch?v=EEJUPXFKe8Q", 
+                    borgir: "https://www.youtube.com/watch?v=VHOH6CQJ-2g" 
+                },
+                challenge: { desc: "Overload 'add' for int and double.", start: "// Code", regex: /add\(int.*\).*\n.*add\(double.*\)/s }
+            },
+            {
+                id: 3, title: "Pointers & References", icon: "fa-location-arrow",
+                image: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&q=80&w=800",
+                sarcasm: "Pointers: The #1 reason C++ students drop out. It's just a memory address, stop crying.",
+                tip: "* gets the Value. & gets the Address. Memorize this or fail.",
+                theory: `
+                    <h3>Pointers (*)</h3>
+                    <p>A variable that stores the memory address of another variable. <br/><code>int *p = &x;</code> <br/>Think of it as a treasure map. The pointer holds the coordinates (0x7F...), not the treasure itself.</p>
+
+                    <h3>References (&)</h3>
+                    <p>An alias. A nickname. <br/><code>int &ref = x;</code> <br/>If <code>x</code> is Bruce Wayne, <code>ref</code> is Batman. If you punch Batman, Bruce Wayne bleeds. Unlike pointers, references cannot be null and cannot be reassigned. They are loyal.</p>
+                    
+                    <h3>Why is this annoying?</h3>
+                    <p>Because if you dereference a null pointer, your program crashes (Segfault). It's the digital equivalent of stepping on a landmine.</p>
+                `,
+                code: `int a = 10;\nint *p = &a; // Pointer\nint &r = a; // Reference\n*p = 20; // a is now 20`,
+                links: {
+                    desi: "https://www.youtube.com/watch?v=2Dhec_2zGUk", 
+                    borgir: "https://www.youtube.com/watch?v=0NwsayeOsd4" 
+                },
+                challenge: { desc: "Create a pointer 'ptr' to variable 'z'.", start: "int z = 5;\n// Code", regex: /int\s*\*\s*ptr\s*=\s*&z/ }
+            },
+            {
+                id: 4, title: "Classes & Objects", icon: "fa-sitemap",
+                image: "https://images.unsplash.com/photo-1507721999472-8ed4421c4af2?auto=format&fit=crop&q=80&w=800",
+                sarcasm: "A Class is a blueprint. An Object is the house. You can't live in a blueprint, unless you're a cartoon character.",
+                tip: "Classes end with a semicolon. Forgetting this is a rookie mistake that will cost you 2 hours of debugging.",
+                theory: `
+                    <h3>Class Definition</h3>
+                    <p>The fundamental building block of OOP. It bundles data and methods.</p>
+
+                    <h3>Access Specifiers</h3>
+                    <ul>
+                        <li><strong>Private:</strong> (Default) Only the class itself can touch these. Like your diary.</li>
+                        <li><strong>Public:</strong> The interface. The buttons on the microwave.</li>
+                        <li><strong>Protected:</strong> Accessible to children (Inheritance). Like a family trust fund.</li>
+                    </ul>
+
+                    <h3>The 'this' Pointer</h3>
+                    <p>A pointer to the current object instance. Used when your parameter name matches your member name (<code>this->x = x</code>). It's the object saying "Me! I'm talking about ME!".</p>
+                `,
+                code: `class Cat {\npublic:\n  void meow() { cout << "Meow"; }\n};`,
+                links: {
+                    desi: "https://www.youtube.com/watch?v=nmJelCoFsFk", 
+                    borgir: "https://www.youtube.com/watch?v=VHOH6CQJ-2g" 
+                },
+                challenge: { desc: "Create class 'User' with public method 'login'.", start: "class User {\n  // Code\n};", regex: /public:.*void\s+login/s }
+            },
+            {
+                id: 5, title: "Constructors", icon: "fa-hammer",
+                image: "https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?auto=format&fit=crop&q=80&w=800",
+                sarcasm: "The birth of an object. If you don't write one, C++ writes a boring one for you.",
+                tip: "Constructors have NO return type. Not even void. Don't embarrass yourself.",
+                theory: `
+                    <h3>What is a Constructor?</h3>
+                    <p>A special method called automatically when an object is instantiated. It sets up the initial state.</p>
+                    
+                    <h3>Types</h3>
+                    <ul>
+                        <li><strong>Default:</strong> No arguments. <code>Dog() {}</code></li>
+                        <li><strong>Parameterized:</strong> Takes arguments. <code>Dog(string name) {}</code></li>
+                        <li><strong>Copy Constructor:</strong> Creates a clone. <code>Dog(const Dog &d)</code></li>
+                    </ul>
+
+                    <h3>Initializer Lists</h3>
+                    <p><code>Box(int h) : height(h) {}</code>. This is the "proper" way to initialize const variables and references. Use it.</p>
+                `,
+                code: `class Box {\n  int w;\npublic:\n  Box(int width) : w(width) {} // Init List\n};`,
+                links: {
+                    desi: "https://www.youtube.com/watch?v=EEJUPXFKe8Q", 
+                    borgir: "https://www.youtube.com/watch?v=5z3KEX9AZEQ" 
+                },
+                challenge: { desc: "Write a constructor for 'Car' setting 'speed'.", start: "class Car {\n int speed;\npublic:\n // Code\n};", regex: /Car\s*\(int\s+\w+\)\s*:/ }
+            },
+            {
+                id: 6, title: "Destructors", icon: "fa-skull",
+                image: "https://images.unsplash.com/photo-1533073526757-2c8ca1df9f1c?auto=format&fit=crop&q=80&w=800",
+                sarcasm: "The grim reaper of C++. It cleans up your mess when the object dies.",
+                tip: "If you used 'new' in the constructor, you MUST use 'delete' in the destructor. Or enjoy your memory leaks.",
+                theory: `
+                    <h3>The Destructor</h3>
+                    <p>Prefix with a tilde (~). <code>~ClassName()</code>. Called automatically when an object goes out of scope.</p>
+
+                    <h3>Why do we care?</h3>
+                    <p>In languages like Java/Python, a Garbage Collector cleans up for you. In C++, you are the Garbage Collector. If you open a file or allocate memory and don't close/delete it in the destructor, that memory is gone forever until reboot. Great job.</p>
+                `,
+                code: `class File {\npublic:\n  ~File() { cout << "Closing file..."; }\n};`,
+                links: {
+                    desi: "https://www.youtube.com/watch?v=rm4tGxWBkqs", 
+                    borgir: "https://www.youtube.com/watch?v=g837vfl1J0A" 
+                },
+                challenge: { desc: "Write a destructor for class App.", start: "class App {\n // Code\n};", regex: /~App\s*\(\s*\)/ }
+            },
+            {
+                id: 7, title: "Operator Overloading", icon: "fa-sliders",
+                image: "https://images.unsplash.com/photo-1516937941344-00b4ec277cd0?auto=format&fit=crop&q=80&w=800",
+                sarcasm: "Because 'a.add(b)' is too readable. We want 'a + b' to look cool.",
+                tip: "You CANNOT overload ::, ., .*, or ?:. Don't try.",
+                theory: `
+                    <h3>The Concept</h3>
+                    <p>Giving standard operators (+, -, *, <<) special meaning for your custom classes. </p>
+
+                    <h3>Member vs Non-Member</h3>
+                    <ul>
+                        <li><strong>Member Function:</strong> <code>Point operator+(Point const& obj)</code>. Left operand is <code>this</code>.</li>
+                        <li><strong>Non-Member (Friend):</strong> <code>friend Point operator+(Point a, Point b)</code>. Needs two arguments. Required if the left operand is NOT your class (like <code>cout << obj</code>).</li>
+                    </ul>
+                `,
+                code: `// Allowing Box + Box\nBox operator+(const Box& b) {\n  return Box(this->size + b.size);\n}`,
+                links: {
+                    desi: "https://www.youtube.com/watch?v=BnMnozsSPmw", 
+                    borgir: "https://www.youtube.com/watch?v=BnMnozsSPmw" 
+                },
+                challenge: { desc: "Overload '==' for class Num.", start: "class Num {\n // Code\n};", regex: /bool\s+operator==/ }
+            },
+            {
+                id: 8, title: "Composition vs Aggregation", icon: "fa-puzzle-piece",
+                image: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800",
+                sarcasm: "Has-A relationships. Composition is marriage (die together). Aggregation is dating (move on).",
+                tip: "Composition = Member Object. Aggregation = Pointer to Object.",
+                theory: `
+                    <h3>Composition (Strong)</h3>
+                    <p>The child cannot exist without the parent. <br/>Example: A <code>House</code> has a <code>Room</code>. If you destroy the House, the Room is destroyed too.</p>
+
+                    <h3>Aggregation (Weak)</h3>
+                    <p>The child lives independently. <br/>Example: A <code>Car</code> has a <code>Driver</code>. If the Car is destroyed, the Driver (hopefully) survives and gets a new Car.</p>
+                `,
+                code: `class House {\n  Room bedroom; // Composition\n};\nclass Car {\n  Driver* d; // Aggregation\n};`,
+                links: {
+                    desi: "https://www.youtube.com/watch?v=2Dhec_2zGUk", 
+                    borgir: "https://www.youtube.com/watch?v=0NwsayeOsd4" 
+                },
+                challenge: { desc: "Create class 'Comp' containing 'CPU' obj.", start: "class CPU{};\nclass Comp {\n // Code\n};", regex: /CPU\s+\w+/ }
+            },
+            {
+                id: 9, title: "Inheritance", icon: "fa-tree",
+                image: "https://images.unsplash.com/photo-1542273917363-3b1817f69a2d?auto=format&fit=crop&q=80&w=800",
+                sarcasm: "The lazy programmer's dream. Why write code when you can steal it from a parent class?",
+                tip: "Constructors execute Top-Down (Parent -> Child). Destructors execute Bottom-Up (Child -> Parent).",
+                theory: `
+                    <h3>The IS-A Relationship</h3>
+                    <p>Inheritance allows a Derived class to acquire properties of a Base class. <code>class Dog : public Animal</code>.</p>
+
+                    <h3>Types</h3>
+                    <ul>
+                        <li><strong>Single:</strong> A -> B</li>
+                        <li><strong>Multiple:</strong> A, B -> C (A mess. Avoid if possible).</li>
+                        <li><strong>Multilevel:</strong> A -> B -> C</li>
+                    </ul>
+
+                    <h3>Diamond Problem</h3>
+                    <p>If B and C inherit from A, and D inherits from B and C... D has two copies of A. Solution: <code>virtual inheritance</code>.</p>
+                `,
+                code: `class Animal { void eat(); };\nclass Dog : public Animal { void bark(); };`,
+                links: {
+                    desi: "https://www.youtube.com/watch?v=qHrnTf5DOeI", 
+                    borgir: "https://www.youtube.com/watch?v=0NwsayeOsd4" 
+                },
+                challenge: { desc: "Inherit 'Phone' from 'Device'.", start: "class Device{};\n// Code", regex: /:\s*public\s+Device/ }
+            },
+            {
+                id: 10, title: "Polymorphism", icon: "fa-masks-theater",
+                image: "https://images.unsplash.com/photo-1509248961158-e54f6934749c?auto=format&fit=crop&q=80&w=800",
+                sarcasm: "One interface, multiple forms. It's basically magic logic that decides which function to run at the last possible second.",
+                tip: "You NEED pointers or references to Base class for polymorphism to work. `Base b = Derived();` slices the object.",
+                theory: `
+                    <h3>Static vs Dynamic</h3>
+                    <ul>
+                        <li><strong>Static (Early Binding):</strong> Overloading. Compiler decides at compile time.</li>
+                        <li><strong>Dynamic (Late Binding):</strong> Overriding. Program decides at runtime using the V-Table.</li>
+                    </ul>
+
+                    <h3>Virtual Functions</h3>
+                    <p>The keyword <code>virtual</code> tells the compiler "Hey, ignore the type of the pointer, look at the actual object inside". This allows a <code>Shape*</code> pointer to call <code>Circle::draw()</code>.</p>
+                `,
+                code: `class Base { virtual void show(); };\nclass Derived : public Base { void show() override; };`,
+                links: {
+                    desi: "https://www.youtube.com/watch?v=2Dhec_2zGUk", 
+                    borgir: "https://www.youtube.com/watch?v=wK93q-JQUvw" 
+                },
+                challenge: { desc: "Declare a virtual function 'play'.", start: "class Game {\n // Code\n};", regex: /virtual\s+void\s+play/ }
+            },
+            {
+                id: 11, title: "Abstract Classes", icon: "fa-ghost",
+                image: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=800",
+                sarcasm: "Classes so vague they don't even exist. You can't instantiate them. They are just ideas.",
+                tip: "If a class has ONE pure virtual function, it is Abstract. You MUST override that function in the child or the child becomes abstract too.",
+                theory: `
+                    <h3>Pure Virtual Functions</h3>
+                    <p><code>virtual void draw() = 0;</code> <br/>The "= 0" means "I have no clue how to do this, let the kids figure it out".</p>
+
+                    <h3>Abstract Class</h3>
+                    <p>Used to define an Interface. A <code>Shape</code> class doesn't know how to draw itself, but it knows every shape *should* draw itself.</p>
+                `,
+                code: `class Shape {\n  virtual void draw() = 0; // Pure Virtual\n};`,
+                links: {
+                    desi: "https://www.youtube.com/watch?v=T1fkvT1uPj8", 
+                    borgir: "https://www.youtube.com/watch?v=0NwsayeOsd4" 
+                },
+                challenge: { desc: "Create pure virtual 'calc'.", start: "class Math {\n // Code\n};", regex: /virtual\s+.*\s+calc.*\s*=\s*0/ }
+            },
+            {
+                id: 12, title: "Templates", icon: "fa-clone",
+                image: "https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?auto=format&fit=crop&q=80&w=800",
+                sarcasm: "Writing the same code for int, float, and double is stupid. Templates let you write it once.",
+                tip: "Templates are compiled on demand. If you define them in a .cpp file, you'll get linker errors. Put them in .h.",
+                theory: `
+                    <h3>Generic Programming</h3>
+                    <p>Templates allow functions and classes to operate with generic types. </p>
+
+                    <h3>Syntax</h3>
+                    <p><code>template &lt;typename T&gt;</code> <br/>T is a placeholder. When you call <code>add&lt;int&gt;(1, 2)</code>, the compiler replaces T with int.</p>
+                    
+                    <h3>Class Templates</h3>
+                    <p>Used for containers like <code>vector&lt;int&gt;</code> or <code>Stack&lt;float&gt;</code>.</p>
+                `,
+                code: `template <typename T>\nT add(T a, T b) { return a + b; }`,
+                links: {
+                    desi: "https://www.youtube.com/watch?v=nGJTWaaFdjc", 
+                    borgir: "https://www.youtube.com/watch?v=VHOH6CQJ-2g" 
+                },
+                challenge: { desc: "Start a template function.", start: "// Code", regex: /template\s*<\s*typename\s+T\s*>/ }
+            },
+            {
+                id: 13, title: "Exception Handling", icon: "fa-bomb",
+                image: "https://images.unsplash.com/photo-1594322436404-5a0526db4d13?auto=format&fit=crop&q=80&w=800",
+                sarcasm: "Because pretending errors don't exist works great... until the demo fails.",
+                tip: "Always catch by reference `catch(exception &e)` to prevent slicing.",
+                theory: `
+                    <h3>Try-Catch Blocks</h3>
+                    <ul>
+                        <li><strong>Try:</strong> Code that might explode.</li>
+                        <li><strong>Throw:</strong> Detecting the explosion and yelling "FIRE!".</li>
+                        <li><strong>Catch:</strong> Putting out the fire.</li>
+                    </ul>
+
+                    <h3>Stack Unwinding</h3>
+                    <p>When an exception is thrown, C++ goes up the call stack looking for a handler, destroying all local objects along the way (calling destructors). This is good.</p>
+                `,
+                code: `try {\n  if(x==0) throw "Error";\n} catch(const char* msg) {\n  cout << msg;\n}`,
+                links: {
+                    desi: "https://www.youtube.com/watch?v=2Dhec_2zGUk", 
+                    borgir: "https://www.youtube.com/watch?v=0NwsayeOsd4" 
+                },
+                challenge: { desc: "Throw integer 404.", start: "try {\n // Code\n}", regex: /throw\s+404/ }
+            },
+            {
+                id: 14, title: "File Handling", icon: "fa-file-lines",
+                image: "https://images.unsplash.com/photo-1544396821-4dd40b938ad3?auto=format&fit=crop&q=80&w=800",
+                sarcasm: "Data persistence. Because users hate typing everything again after a restart.",
+                tip: "Always check `if(!file.is_open())` after opening. Assumptions are the mother of all crashes.",
+                theory: `
+                    <h3>File Streams</h3>
+                    <p>To perform file I/O in C++, we use the <code>&lt;fstream&gt;</code> library. It defines three key classes:</p>
+                    <ul>
+                        <li><strong>ofstream:</strong> Stream class to write on files.</li>
+                        <li><strong>ifstream:</strong> Stream class to read from files.</li>
+                        <li><strong>fstream:</strong> Stream class to both read and write from/to files.</li>
+                    </ul>
+
+                    <h3>File Modes</h3>
+                    <p>Flags to specify how the file is opened:</p>
+                    <ul>
+                        <li><code>ios::app</code> - Append to the end of file</li>
+                        <li><code>ios::ate</code> - Go to end of file on opening</li>
+                        <li><code>ios::binary</code> - Binary file</li>
+                        <li><code>ios::in</code> - Open for reading only</li>
+                        <li><code>ios::out</code> - Open for writing only</li>
+                    </ul>
+
+                    <h3>Closing Files</h3>
+                    <p>Always close your files using <code>file.close()</code> to flush the buffer and release resources.</p>
+                `,
+                code: `ofstream f("log.txt", ios::app);\nf << "Log entry";\nf.close();`,
+                links: {
+                    desi: "https://www.youtube.com/watch?v=yGB9jhsEsr8", 
+                    borgir: "https://www.youtube.com/watch?v=VHOH6CQJ-2g" 
+                },
+                challenge: { desc: "Open 'data.txt' in read mode.", start: "#include <fstream>\n// Code", regex: /ifstream\s+\w+\s*\(\s*"data\.txt"/ }
+            },
+            {
+                id: 15, title: "Friend Functions", icon: "fa-handshake",
+                image: "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&q=80&w=800",
+                sarcasm: "A friend function is allowed to touch your private members. Yes, C++ terminology is awkward.",
+                tip: "Use friends sparingly. It breaks encapsulation.",
+                theory: `
+                    <h3>What is a Friend?</h3>
+                    <p>A function or class that is not a member but has access to private/protected members. It's like giving your spare key to a neighbor.</p>
+
+                    <h3>Usage</h3>
+                    <p>Commonly used for operator overloading where the left operand is not your class (e.g., <code>cout << obj</code>).</p>
+                `,
+                code: `class Box {\n  friend void printBox(Box b);\n};`,
+                links: {
+                    desi: "https://www.youtube.com/watch?v=t0W_bL5-fX0", 
+                    borgir: "https://www.youtube.com/watch?v=E-bWjF-fX0k" 
+                },
+                challenge: { desc: "Declare a friend function 'help'.", start: "class A {\n // Code\n};", regex: /friend\s+void\s+help/ }
+            },
+            {
+                id: 16, title: "STL (Standard Template Library)", icon: "fa-box-open",
+                image: "https://images.unsplash.com/photo-1580894732444-8ecded7900cd?auto=format&fit=crop&q=80&w=800",
+                sarcasm: "Why write a Linked List? Someone smarter already did it. Use Vector.",
+                tip: "Vectors are just dynamic arrays. Maps are key-value pairs. Iterators are pointers on steroids.",
+                theory: `
+                    <h3>Components</h3>
+                    <ul>
+                        <li><strong>Containers:</strong> vector, list, map, set.</li>
+                        <li><strong>Algorithms:</strong> sort, find, binary_search.</li>
+                        <li><strong>Iterators:</strong> Objects that traverse containers.</li>
+                    </ul>
+
+                    <h3>Vector</h3>
+                    <p><code>vector&lt;int&gt; v;</code>. It resizes automatically. It's the best thing since sliced bread.</p>
+                `,
+                code: `vector<int> v = {1, 2, 3};\nv.push_back(4);`,
+                links: {
+                    desi: "https://www.youtube.com/watch?v=2Dhec_2zGUk", 
+                    borgir: "https://www.youtube.com/watch?v=VHOH6CQJ-2g" 
+                },
+                challenge: { desc: "Declare a vector of strings.", start: "// Code", regex: /vector\s*<\s*string\s*>/ }
+            }
+        ];
+
+        // --- COMPONENTS ---
+
+        const Sidebar = ({ isOpen, toggle, active, setActive, setView }) => (
+            <div className={`${isOpen ? 'w-64' : 'w-0 md:w-20'} bg-cyber-black border-r border-cyber-light transition-all duration-300 flex flex-col h-full z-20`}>
+                <div onClick={() => setView('home')} className="p-4 flex items-center justify-between border-b border-cyber-light h-16 cursor-pointer hover:bg-cyber-light transition">
+                    <span className={`text-cyber-neon font-bold text-xl tracking-wider ${!isOpen && 'hidden md:hidden'}`}>OOP<span className="text-white">VERSE</span></span>
+                    <button onClick={(e) => {e.stopPropagation(); toggle();}} className="text-gray-400 hover:text-white"><i className="fa-solid fa-bars text-xl"></i></button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto custom-scroll p-2">
+                    <div className={`text-xs font-bold text-gray-500 px-4 mb-2 uppercase ${!isOpen && 'hidden md:hidden'}`}>Modules</div>
+                    {lectures.map(l => (
+                        <button key={l.id} onClick={() => { setActive(l.id); setView('learn'); }} 
+                            className={`w-full p-3 mb-1 flex items-center gap-3 transition-all rounded-lg text-left ${active === l.id && window.view === 'learn' ? 'bg-cyber-accent text-white shadow-[0_0_15px_rgba(139,92,246,0.5)]' : 'text-gray-500 hover:text-gray-300 hover:bg-cyber-light'}`}>
+                            <i className={`fa-solid ${l.icon} text-lg w-6 text-center`}></i>
+                            <span className={`${!isOpen && 'hidden md:hidden'} text-xs font-bold uppercase`}>{l.title}</span>
+                        </button>
+                    ))}
+                </div>
+
+                <div className="p-2 border-t border-cyber-light">
+                    <button onClick={() => setView('resources')} className="w-full p-3 flex items-center gap-3 text-gray-400 hover:text-cyber-neon transition">
+                        <i className="fa-solid fa-book text-lg w-6 text-center"></i>
+                        <span className={`${!isOpen && 'hidden md:hidden'} text-xs font-bold uppercase`}>Resources</span>
+                    </button>
+                </div>
+            </div>
+        );
+
+        const Navbar = ({ view, setView }) => {
+            return (
+                <div className="h-16 bg-cyber-black border-b border-cyber-light flex items-center px-6 justify-between z-10">
+                    <div className="flex gap-2">
+                        {['home', 'learn', 'project', 'game', 'exam'].map(v => (
+                            <button key={v} onClick={() => setView(v)} 
+                                className={`px-4 py-2 rounded-lg font-bold uppercase text-xs tracking-wider transition ${view === v ? 'bg-cyber-neon text-black shadow-[0_0_15px_rgba(0,243,255,0.4)]' : 'text-gray-500 hover:text-white'}`}>
+                                {v}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <a href="https://github.com/TalalAbdullah-1" target="_blank" className="text-gray-400 hover:text-white"><i className="fa-brands fa-github text-xl"></i></a>
+                        <a href="https://www.linkedin.com/in/talal-abdullah-243b44371/" target="_blank" className="text-gray-400 hover:text-blue-500"><i className="fa-brands fa-linkedin text-xl"></i></a>
+                        <a href="https://instagram.com/111mursh" target="_blank" className="text-gray-400 hover:text-pink-500"><i className="fa-brands fa-instagram text-xl"></i></a>
+                        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-cyber-accent to-cyber-neon cursor-pointer border-2 border-white/20 hover:scale-110 transition overflow-hidden" onClick={() => setView('about')}>
+                             <img src="https://ui-avatars.com/api/?name=Talal+Abdullah&background=000&color=fff" className="w-full h-full object-cover" />
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const HomePage = ({ setView }) => (
+            <div className="h-full overflow-y-auto p-10 flex flex-col items-center justify-center text-center bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-cyber-gray via-cyber-black to-black relative">
+                <div className="scanline"></div>
+                <div className="max-w-4xl animate-float z-10">
+                    <h1 className="text-8xl font-black text-white mb-4 neon-glow tracking-tighter">OOP <span className="text-cyber-neon">VERSE</span></h1>
+                    <div className="inline-block px-4 py-1 bg-cyber-light rounded-full border border-cyber-accent text-cyber-accent font-mono text-sm mb-8">OFFICER EDITION v9.0</div>
+                    <p className="text-2xl text-gray-400 mb-10 font-light">"Stop writing spaghetti code. Start building architectural masterpieces."</p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 text-left">
+                        <div className="p-6 bg-cyber-light rounded-xl border border-cyber-gray hover:border-cyber-neon transition cursor-pointer group" onClick={() => setView('learn')}>
+                            <i className="fa-solid fa-book-open text-3xl text-cyber-neon mb-4 group-hover:scale-110 transition"></i>
+                            <h3 className="text-xl font-bold text-white mb-2">16 Modules</h3>
+                            <p className="text-sm text-gray-400">Deep dive with sarcasm, visual diagrams, and pro exam tips.</p>
+                        </div>
+                        <div className="p-6 bg-cyber-light rounded-xl border border-cyber-gray hover:border-cyber-pink transition cursor-pointer group" onClick={() => setView('game')}>
+                            <i className="fa-solid fa-gamepad text-3xl text-cyber-pink mb-4 group-hover:scale-110 transition"></i>
+                            <h3 className="text-xl font-bold text-white mb-2">Infinite Arcade</h3>
+                            <p className="text-sm text-gray-400">Randomized levels every time. You won't play the same game twice.</p>
+                        </div>
+                        <div className="p-6 bg-cyber-light rounded-xl border border-cyber-gray hover:border-cyber-error transition cursor-pointer group" onClick={() => setView('exam')}>
+                            <i className="fa-solid fa-skull text-3xl text-cyber-error mb-4 group-hover:scale-110 transition"></i>
+                            <h3 className="text-xl font-bold text-white mb-2">Exam Sim</h3>
+                            <p className="text-sm text-gray-400">Randomly generated questions from the question bank.</p>
+                        </div>
+                    </div>
+
+                    <button onClick={() => setView('learn')} className="px-10 py-4 bg-cyber-accent text-white font-bold rounded-full text-lg shadow-[0_0_30px_rgba(112,0,255,0.5)] hover:scale-105 transition hover:bg-white hover:text-black">
+                        Start The Grind <i className="fa-solid fa-arrow-right ml-2"></i>
+                    </button>
+                </div>
+            </div>
+        );
+
+        const LearningView = ({ activeId }) => {
+            const lecture = lectures.find(l => l.id === activeId);
+            const [code, setCode] = useState(lecture.challenge.start);
+            const [feedback, setFeedback] = useState(null);
+
+            useEffect(() => { 
+                setCode(lecture.challenge.start); 
+                setFeedback(null); 
+            }, [activeId]);
+
+            const checkCode = () => {
+                if (lecture.challenge.regex.test(code)) {
+                    setFeedback({ type: 'success', msg: "Compiled Successfully. You might actually pass." });
+                } else {
+                    setFeedback({ type: 'error', msg: "Syntax Error. Did you even read the theory?" });
+                }
+            };
+
+            return (
+                <div className="flex-1 overflow-y-auto p-6 lg:p-10 scroll-smooth">
+                    <div className="max-w-6xl mx-auto space-y-8">
+                        <header className="flex items-center gap-6 border-b border-cyber-gray pb-6">
+                            <div className="w-20 h-20 bg-cyber-light rounded-2xl flex items-center justify-center text-4xl text-cyber-neon border border-cyber-gray shadow-[0_0_20px_rgba(0,243,255,0.2)]">
+                                <i className={`fa-solid ${lecture.icon}`}></i>
+                            </div>
+                            <div>
+                                <h1 className="text-4xl font-black text-white tracking-tight uppercase mb-2">{lecture.title}</h1>
+                                <p className="text-cyber-accent font-mono italic">"{lecture.sarcasm}"</p>
+                            </div>
+                        </header>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            <div className="space-y-6">
+                                {/* Visual Diagram */}
+                                <div className="rounded-2xl overflow-hidden border border-cyber-gray relative group h-48 bg-black">
+                                    <img src={lecture.image} className="w-full h-full object-contain opacity-80 group-hover:opacity-100 transition duration-500" />
+                                </div>
+
+                                <div className="glass p-8 rounded-2xl border-t border-cyber-gray">
+                                    <h2 className="text-2xl font-bold text-cyber-neon mb-6"><i className="fa-solid fa-layer-group mr-2"></i>Theory</h2>
+                                    <div className="prose" dangerouslySetInnerHTML={{ __html: lecture.theory }}></div>
+                                    
+                                    <div className="mt-6 p-4 bg-cyber-warning/10 border-l-4 border-cyber-warning rounded-r-lg">
+                                        <h4 className="text-cyber-warning font-bold text-sm uppercase mb-1"><i className="fa-solid fa-lightbulb mr-2"></i>Pro Exam Tip</h4>
+                                        <p className="text-gray-300 text-sm italic">{lecture.tip}</p>
+                                    </div>
+
+                                    <div className="mt-6 pt-6 border-t border-cyber-gray">
+                                        <div className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-widest">Select your Sensei</div>
+                                        <div className="flex gap-4">
+                                            <a href={lecture.links.desi} target="_blank" className="flex-1 py-3 bg-gradient-to-r from-orange-600 to-red-600 rounded-lg text-white font-bold text-center hover:scale-105 transition shadow-lg flex items-center justify-center gap-2">
+                                                <span>🌶️</span> Desi (Hindi/Urdu)
+                                            </a>
+                                            <a href={lecture.links.borgir} target="_blank" className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg text-white font-bold text-center hover:scale-105 transition shadow-lg flex items-center justify-center gap-2">
+                                                <span>🍔</span> Borgir (English)
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col gap-6 sticky top-6 h-fit">
+                                <div className="bg-[#1e1e1e] rounded-xl overflow-hidden border border-cyber-gray shadow-lg">
+                                    <div className="bg-[#252526] px-4 py-2 text-xs text-gray-400 flex justify-between"><span>example.cpp</span></div>
+                                    <pre className="p-4 m-0 overflow-x-auto text-sm text-gray-300 font-mono"><code className="language-cpp">{lecture.code}</code></pre>
+                                </div>
+
+                                <div className="bg-cyber-dark rounded-2xl border border-cyber-accent/30 p-1 flex flex-col relative overflow-hidden shadow-[0_0_20px_rgba(139,92,246,0.15)]">
+                                    <div className="bg-cyber-black p-6 rounded-xl border border-cyber-gray h-full flex flex-col">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h3 className="text-lg font-bold text-white"><i className="fa-solid fa-terminal text-cyber-success mr-2"></i>Code Challenge</h3>
+                                        </div>
+                                        <p className="text-sm text-gray-400 mb-4 font-mono">{lecture.challenge.desc}</p>
+                                        <textarea 
+                                            value={code} onChange={e => setCode(e.target.value)}
+                                            className="flex-1 bg-black text-cyber-neon font-mono p-4 rounded-lg focus:outline-none focus:ring-1 focus:ring-cyber-accent resize-none text-sm min-h-[150px]"
+                                            spellCheck="false"
+                                        ></textarea>
+                                        <div className="flex justify-between items-center mt-4">
+                                            <div className={`text-xs font-mono ${feedback?.type === 'success' ? 'text-cyber-success' : 'text-cyber-error'}`}>
+                                                {feedback ? feedback.msg : "Ready to compile..."}
+                                            </div>
+                                            <button onClick={checkCode} className="px-6 py-2 bg-cyber-accent hover:bg-white hover:text-black text-white font-bold rounded-lg transition">
+                                                Compile
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- GAME COMPONENTS (RANDOMIZED) ---
+
+        const RPGBattle = () => {
+            const [hp, setHp] = useState(100);
+            const [enemyHp, setEnemyHp] = useState(100);
+            const [log, setLog] = useState(["Wild NULL POINTER appeared!"]);
+            const [q, setQ] = useState(null);
+
+            const qBank = [
+                { q: "Destructor symbol?", a: ["~", "#", "!"], c: 0 },
+                { q: "Inheritance keyword?", a: ["extends", "inherits", ":"], c: 2 },
+                { q: "Pointer size (64-bit)?", a: ["4 bytes", "8 bytes", "2 bytes"], c: 1 },
+                { q: "Pure virtual syntax?", a: ["= 0", "= null", "abstract"], c: 0 },
+                { q: "Friend keyword?", a: ["pal", "friend", "buddy"], c: 1 },
+                { q: "Access private members?", a: ["friend", "public", "void"], c: 0 },
+            ];
+
+            const nextTurn = () => {
+                setQ(qBank[Math.floor(Math.random() * qBank.length)]);
+            };
+
+            useEffect(() => { nextTurn(); }, []);
+
+            const attack = (idx) => {
+                if (idx === q.c) {
+                    setEnemyHp(h => Math.max(0, h - 35));
+                    setLog(l => ["Critical Hit! Segment deleted.", ...l]);
+                } else {
+                    setHp(h => Math.max(0, h - 25));
+                    setLog(l => ["Miss! Memory Leak detected.", ...l]);
+                }
+                nextTurn();
+            };
+
+            if (enemyHp === 0) return <div className="h-full flex items-center justify-center text-4xl font-black text-cyber-success">VICTORY <button onClick={() => {setEnemyHp(100); setHp(100); nextTurn();}} className="ml-4 text-sm bg-white text-black px-4 py-2 rounded">Replay</button></div>;
+            if (hp === 0) return <div className="h-full flex items-center justify-center text-4xl font-black text-cyber-error">WASTED <button onClick={() => {setHp(100); setEnemyHp(100); nextTurn();}} className="ml-4 text-sm bg-white text-black px-4 py-2 rounded">Retry</button></div>;
+            if (!q) return <div>Loading...</div>;
+
+            return (
+                <div className="p-8 h-full flex flex-col bg-gray-900">
+                    <div className="flex-1 flex justify-between items-center px-20">
+                        <div className="text-center">
+                            <div className="text-6xl mb-4 animate-float">🧙‍♂️</div>
+                            <div className="w-32 h-4 bg-gray-700 rounded-full overflow-hidden"><div className="h-full bg-cyber-success" style={{width: hp + '%'}}></div></div>
+                        </div>
+                        <div className="text-center">
+                            <div className="text-8xl mb-4 text-cyber-error animate-pulse-fast">🐉</div>
+                            <div className="w-32 h-4 bg-gray-700 rounded-full overflow-hidden"><div className="h-full bg-cyber-error" style={{width: enemyHp + '%'}}></div></div>
+                        </div>
+                    </div>
+                    <div className="bg-black p-6 border-t-2 border-cyber-accent">
+                        <div className="text-white mb-4 font-bold text-xl">{q.q}</div>
+                        <div className="flex gap-4">
+                            {q.a.map((opt, i) => (
+                                <button key={i} onClick={() => attack(i)} className="px-6 py-3 bg-gray-800 hover:bg-cyber-neon hover:text-black rounded text-white transition flex-1">{opt}</button>
+                            ))}
+                        </div>
+                        <div className="mt-4 text-xs text-green-400 font-mono">{log[0]}</div>
+                    </div>
+                </div>
+            );
+        };
+
+        const SpeedRun = () => {
+            const [score, setScore] = useState(0);
+            const [timeLeft, setTimeLeft] = useState(60);
+            const [active, setActive] = useState(false);
+            const [q, setQ] = useState({});
+
+            const questions = [
+                { t: "Constructors have return types.", a: false },
+                { t: "Private members are inherited.", a: false },
+                { t: "Polymorphism requires virtual functions.", a: true },
+                { t: "Destructors take arguments.", a: false },
+                { t: "C++ supports multiple inheritance.", a: true },
+                { t: "Friend functions are members.", a: false },
+                { t: "Abstract classes can be instantiated.", a: false },
+                { t: "Templates are compiled on demand.", a: true },
+                { t: "References can be null.", a: false },
+            ];
+
+            useEffect(() => {
+                if (active && timeLeft > 0) {
+                    const timer = setInterval(() => setTimeLeft(t => t - 1), 1000);
+                    return () => clearInterval(timer);
+                }
+            }, [active, timeLeft]);
+
+            const nextQ = () => setQ(questions[Math.floor(Math.random() * questions.length)]);
+
+            const start = () => { setActive(true); setScore(0); setTimeLeft(60); nextQ(); };
+            const answer = (bool) => {
+                if (bool === q.a) setScore(s => s + 1);
+                else setScore(s => Math.max(0, s - 1));
+                nextQ();
+            };
+
+            if (!active) return <div className="h-full flex items-center justify-center"><button onClick={start} className="px-8 py-4 bg-cyber-neon text-black font-bold rounded-xl hover:scale-110 transition">START SPEED RUN</button></div>;
+            if (timeLeft === 0) return <div className="h-full flex flex-col items-center justify-center"><h1 className="text-4xl text-white font-bold mb-4">Score: {score}</h1><button onClick={() => setActive(false)} className="text-cyber-accent">Back</button></div>;
+
+            return (
+                <div className="h-full flex flex-col items-center justify-center bg-cyber-black">
+                    <div className="text-6xl font-black text-cyber-pink mb-8">{timeLeft}s</div>
+                    <div className="text-2xl text-white mb-12 text-center max-w-md">{q.t}</div>
+                    <div className="flex gap-8">
+                        <button onClick={() => answer(true)} className="w-32 h-32 bg-green-500 rounded-full text-2xl font-black text-black hover:scale-110 transition">TRUE</button>
+                        <button onClick={() => answer(false)} className="w-32 h-32 bg-red-500 rounded-full text-2xl font-black text-black hover:scale-110 transition">FALSE</button>
+                    </div>
+                    <div className="mt-8 text-cyber-neon font-mono">Score: {score}</div>
+                </div>
+            );
+        };
+
+        const MemoryMatrix = () => {
+            const allItems = [
+                { content: "Polymorphism", pair: 1 }, { content: "Many Forms", pair: 1 },
+                { content: "Encapsulation", pair: 2 }, { content: "Data Hiding", pair: 2 },
+                { content: "Constructor", pair: 3 }, { content: "Init Object", pair: 3 },
+                { content: "Destructor", pair: 4 }, { content: "~Class()", pair: 4 },
+                { content: "Abstract", pair: 5 }, { content: "Pure Virtual", pair: 5 },
+                { content: "Template", pair: 6 }, { content: "Generic", pair: 6 },
+                { content: "Friend", pair: 7 }, { content: "Not Member", pair: 7 },
+            ];
+            
+            const [cards, setCards] = useState([]);
+            const [flipped, setFlipped] = useState([]);
+            const [matched, setMatched] = useState([]);
+
+            const initGame = () => {
+                // Randomly select 4 pairs
+                const shuffledPairs = [...new Set(allItems.map(i => i.pair))].sort(() => Math.random() - 0.5).slice(0, 4);
+                const gameItems = allItems.filter(i => shuffledPairs.includes(i.pair));
+                setCards(gameItems.sort(() => Math.random() - 0.5));
+                setFlipped([]);
+                setMatched([]);
+            };
+
+            useEffect(() => { initGame(); }, []);
+
+            const handleFlip = (idx) => {
+                if (flipped.length === 2 || matched.includes(idx) || flipped.includes(idx)) return;
+                const newFlipped = [...flipped, idx];
+                setFlipped(newFlipped);
+                
+                if (newFlipped.length === 2) {
+                    const [first, second] = newFlipped;
+                    if (cards[first].pair === cards[second].pair) {
+                        setMatched([...matched, first, second]);
+                        setFlipped([]);
+                    } else {
+                        setTimeout(() => setFlipped([]), 1000);
+                    }
+                }
+            };
+
+            return (
+                <div className="h-full flex flex-col items-center justify-center p-8">
+                    <button onClick={initGame} className="mb-8 px-4 py-2 bg-cyber-light border border-gray-600 rounded text-xs text-gray-400 hover:text-white">New Board</button>
+                    <div className="grid grid-cols-4 gap-4 w-full max-w-3xl">
+                        {cards.map((card, i) => (
+                            <div key={i} onClick={() => handleFlip(i)} className={`aspect-square cursor-pointer game-card ${flipped.includes(i) || matched.includes(i) ? 'flipped' : ''}`}>
+                                <div className="game-card-inner relative w-full h-full text-center">
+                                    <div className="game-card-front bg-cyber-light rounded-xl border border-cyber-gray flex items-center justify-center hover:border-cyber-neon transition">
+                                        <i className="fa-solid fa-question text-cyber-gray text-2xl"></i>
+                                    </div>
+                                    <div className="game-card-back bg-cyber-accent rounded-xl flex items-center justify-center p-2 text-white font-bold text-sm shadow-[0_0_15px_rgba(139,92,246,0.5)]">
+                                        {card.content}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const SyntaxScramble = () => {
+            const snippets = [
+                ["#include <iostream>", "using namespace std;", "int main() {", "  cout << \"Hello\";", "  return 0;", "}"],
+                ["class Dog {", "  int age;", "public:", "  void bark() {", "    cout << \"Woof\";", "  }", "};"],
+                ["template <typename T>", "T add(T a, T b) {", "  return a + b;", "}"],
+                ["try {", "  throw 404;", "}", "catch(int e) {", "  cout << e;", "}"]
+            ];
+
+            const [correctOrder, setCorrectOrder] = useState([]);
+            const [shuffled, setShuffled] = useState([]);
+            const [userOrder, setUserOrder] = useState([]);
+
+            const initGame = () => {
+                const snip = snippets[Math.floor(Math.random() * snippets.length)];
+                setCorrectOrder(snip);
+                setShuffled([...snip].sort(() => Math.random() - 0.5));
+                setUserOrder([]);
+            };
+
+            useEffect(() => { initGame(); }, []);
+
+            const select = (line) => {
+                setUserOrder([...userOrder, line]);
+                setShuffled(shuffled.filter(l => l !== line));
+            };
+
+            const isWin = JSON.stringify(userOrder) === JSON.stringify(correctOrder);
+
+            return (
+                <div className="h-full p-8 flex flex-col items-center">
+                    <div className="flex w-full max-w-4xl gap-8 flex-1">
+                        <div className="flex-1 space-y-2">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-cyber-neon font-bold">Click lines in correct order:</h3>
+                                <button onClick={initGame} className="text-xs bg-gray-800 px-2 py-1 rounded">New Code</button>
+                            </div>
+                            {shuffled.map((line, i) => (
+                                <button key={i} onClick={() => select(line)} className="w-full text-left p-3 bg-cyber-light hover:bg-cyber-gray border border-gray-700 rounded font-mono text-sm text-pink-500 transition">
+                                    {line}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex-1 bg-black p-6 rounded-xl border border-cyber-accent font-mono text-sm text-green-400 relative">
+                            {userOrder.map((l, i) => <div key={i}>{l}</div>)}
+                            {isWin && <div className="absolute inset-0 flex items-center justify-center bg-black/80 text-cyber-neon font-bold text-2xl backdrop-blur-sm">COMPILED!</div>}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const BugHunter = () => {
+            const bugs = [
+                { code: ["class Test {", "int x;", "public:", "Test(int val) {", "x = val", "}", "};"], line: 4, msg: "Missing semicolon" },
+                { code: ["int main() {", "  int *p = null;", "  *p = 10;", "  return 0;", "}"], line: 2, msg: "Dereferencing Null Pointer" },
+                { code: ["class Base {", "  virtual void show();", "};", "class Der : public Base {", "  void show() override;", "};"], line: 1, msg: "Should be pure virtual? Or defined." },
+                { code: ["void func(int x) {", "  if (x = 0)", "    cout << 'Zero';", "}"], line: 1, msg: "Assignment (=) instead of Equality (==)" }
+            ];
+
+            const [currentBug, setCurrentBug] = useState(null);
+            const [found, setFound] = useState(false);
+
+            const initGame = () => {
+                setCurrentBug(bugs[Math.floor(Math.random() * bugs.length)]);
+                setFound(false);
+            };
+
+            useEffect(() => { initGame(); }, []);
+
+            if (!currentBug) return <div>Loading...</div>;
+
+            return (
+                <div className="h-full flex flex-col items-center justify-center p-8">
+                    <div className="flex justify-between w-full max-w-2xl mb-6 items-center">
+                        <h2 className="text-2xl text-white font-bold">Find the Bug (Click line)</h2>
+                        <button onClick={initGame} className="px-4 py-2 bg-cyber-light border border-gray-600 rounded text-xs">Next Bug</button>
+                    </div>
+                    <div className="bg-[#1e1e1e] p-6 rounded-xl font-mono text-lg shadow-2xl border border-gray-700 w-full max-w-2xl">
+                        {currentBug.code.map((line, i) => (
+                            <div 
+                                key={i} 
+                                onClick={() => { if(i === currentBug.line) setFound(true); }} 
+                                className={`cursor-pointer px-2 py-1 transition hover:bg-white/5 ${found && i === currentBug.line ? 'text-red-500 font-bold bg-red-900/20' : 'text-gray-400'}`}
+                            >
+                                {line}
+                            </div>
+                        ))}
+                    </div>
+                    {found && <div className="mt-6 text-cyber-error font-bold text-xl animate-bounce">BUG CAUGHT: {currentBug.msg}</div>}
+                </div>
+            );
+        };
+
+        const GameMode = () => {
+            const [game, setGame] = useState(null);
+
+            if (!game) return (
+                <div className="h-full flex items-center justify-center p-8 bg-cyber-black">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl">
+                        {[
+                            { id: 'rpg', title: 'Null Pointer RPG', icon: 'fa-dragon', color: 'text-cyber-error' },
+                            { id: 'speed', title: 'Speed Run', icon: 'fa-stopwatch', color: 'text-cyber-neon' },
+                            { id: 'memory', title: 'Memory Matrix', icon: 'fa-brain', color: 'text-cyber-pink' },
+                            { id: 'syntax', title: 'Syntax Scramble', icon: 'fa-code', color: 'text-yellow-400' },
+                            { id: 'bug', title: 'Bug Hunter', icon: 'fa-bug', color: 'text-green-400' },
+                        ].map(g => (
+                            <div key={g.id} onClick={() => setGame(g.id)} className="bg-cyber-light p-8 rounded-2xl border border-cyber-gray hover:border-white hover:scale-105 transition cursor-pointer flex flex-col items-center justify-center gap-4 group">
+                                <i className={`fa-solid ${g.icon} text-5xl ${g.color} group-hover:animate-bounce`}></i>
+                                <h3 className="text-xl font-bold text-white">{g.title}</h3>
+                                <p className="text-xs text-gray-500 uppercase tracking-widest group-hover:text-white">New Level Generated</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="h-full relative">
+                    <button onClick={() => setGame(null)} className="absolute top-4 left-4 z-10 px-4 py-2 bg-cyber-light text-white rounded-full hover:bg-white hover:text-black transition text-xs font-bold uppercase">
+                        <i className="fa-solid fa-arrow-left mr-2"></i>Exit Arcade
+                    </button>
+                    {game === 'rpg' && <RPGBattle />}
+                    {game === 'speed' && <SpeedRun />}
+                    {game === 'memory' && <MemoryMatrix />}
+                    {game === 'syntax' && <SyntaxScramble />}
+                    {game === 'bug' && <BugHunter />}
+                </div>
+            );
+        };
+
+        // --- OTHER VIEWS ---
+
+        const ProjectLab = () => {
+            const [code, setCode] = useState("#include <iostream>\nusing namespace std;\n\nint main() {\n  cout << \"Hello OOPverse\";\n  return 0;\n}");
+            const [out, setOut] = useState("");
+            
+            return (
+                <div className="h-full flex flex-col p-6">
+                    <h1 className="text-3xl font-bold text-white mb-6">Dev <span className="text-cyber-accent">Lab</span></h1>
+                    <div className="flex-1 flex gap-4">
+                        <div className="flex-1 bg-[#1e1e1e] rounded-xl border border-gray-700 overflow-hidden flex flex-col">
+                            <div className="bg-[#252526] p-2 text-xs text-gray-400 border-b border-black">main.cpp</div>
+                            <textarea value={code} onChange={e => setCode(e.target.value)} className="flex-1 bg-transparent p-4 text-gray-300 font-mono resize-none focus:outline-none"></textarea>
+                        </div>
+                        <div className="w-1/3 flex flex-col gap-4">
+                            <div className="flex-1 bg-black rounded-xl border border-gray-700 p-4 font-mono text-sm text-green-500 overflow-auto">
+                                <div className="text-gray-500 text-xs mb-2 border-b border-gray-800 pb-1">TERMINAL</div>
+                                {out || "> Ready..."}
+                            </div>
+                            <button onClick={() => setOut("> Compiling...\n> Process finished with exit code 0")} className="py-3 bg-cyber-success text-black font-bold rounded-lg hover:bg-white transition">
+                                <i className="fa-solid fa-play mr-2"></i> Run
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const ExamSim = () => {
+            const [active, setActive] = useState(false);
+            const [questions, setQuestions] = useState([]);
+            
+            // Large bank of questions
+            const bank = [
+                { id: 1, q: "Explain the difference between composition and aggregation." },
+                { id: 2, q: "Write a destructor for a class that allocates dynamic memory." },
+                { id: 3, q: "Overload the '+' operator for a Complex Number class." },
+                { id: 4, q: "Create an abstract class 'Shape' with pure virtual area()." },
+                { id: 5, q: "Demonstrate runtime polymorphism using pointers." },
+                { id: 6, q: "Write a template function for swapping two values." },
+                { id: 7, q: "Explain the Diamond Problem in Multiple Inheritance." },
+                { id: 8, q: "Write a try-catch block handling division by zero." },
+            ];
+
+            const startExam = () => {
+                const shuffled = [...bank].sort(() => 0.5 - Math.random());
+                setQuestions(shuffled.slice(0, 3));
+                setActive(true);
+            };
+
+            if (!active) return (
+                <div className="h-full flex items-center justify-center text-center">
+                    <div className="max-w-md">
+                        <h1 className="text-5xl font-black text-white mb-4">FINAL EXAM</h1>
+                        <p className="text-gray-400 mb-8">Questions sourced randomly from the bank. Each attempt is unique.</p>
+                        <button onClick={startExam} className="px-8 py-4 bg-cyber-error text-white font-bold rounded-lg hover:scale-110 transition shadow-[0_0_20px_rgba(255,42,109,0.5)]">START</button>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="h-full overflow-y-auto p-10 pb-20">
+                    <div className="flex justify-between items-center mb-8 border-b border-gray-800 pb-4">
+                        <h2 className="text-2xl font-bold text-white">Exam Session</h2>
+                        <button onClick={() => setActive(false)} className="text-gray-500 hover:text-white">Cancel</button>
+                    </div>
+                    <div className="space-y-8">
+                        {questions.map((q, i) => (
+                            <div key={q.id} className="bg-cyber-light p-6 rounded-xl border border-gray-800">
+                                <h3 className="text-cyber-neon font-bold mb-4">Q{i+1}: {q.q}</h3>
+                                <textarea className="w-full bg-black text-gray-300 p-4 rounded-lg font-mono border border-gray-700 h-32 focus:border-cyber-accent focus:outline-none"></textarea>
+                            </div>
+                        ))}
+                    </div>
+                    <button onClick={() => alert("Submitted! Check console for grade (JK, you passed).")} className="fixed bottom-8 right-8 px-8 py-3 bg-cyber-success text-black font-bold rounded-full shadow-lg">Submit</button>
+                </div>
+            );
+        };
+
+        const ResourcesView = () => (
+            <div className="h-full p-10 overflow-y-auto bg-cyber-black">
+                <h1 className="text-4xl font-bold text-white mb-8">Course Resources</h1>
+                <div className="grid grid-cols-1 gap-6">
+                    <div className="bg-cyber-light p-8 rounded-xl border border-cyber-gray">
+                        <div className="flex items-center gap-4 mb-4">
+                            <i className="fa-solid fa-file-pdf text-4xl text-red-500"></i>
+                            <div>
+                                <h2 className="text-xl font-bold text-white">OOP Exam Preparation Guide.pdf</h2>
+                                <p className="text-gray-400 text-sm">Official Syllabus & Cheat Sheet</p>
+                            </div>
+                        </div>
+                        <div className="bg-black p-4 rounded text-sm text-gray-400 font-mono h-64 overflow-y-auto border border-gray-700">
+                            (PDF Content Summary)<br/><br/>
+                            1. Intro to OOP (Paradigms, PIIE)<br/>
+                            2. Functions (Overloading, Passing)<br/>
+                            3. Pointers & References<br/>
+                            4. Classes & Objects (Access Specifiers, 'this')<br/>
+                            5. Constructors & Destructors<br/>
+                            6. Operator Overloading<br/>
+                            7. Composition vs Aggregation<br/>
+                            8. Inheritance (Types, Diamond Prob)<br/>
+                            9. Polymorphism (Virtual Functions)<br/>
+                            10. Templates (Generic Programming)<br/>
+                            11. Exception Handling<br/>
+                            12. File Handling (Streams)<br/>
+                            ... See Lectures for full content.
+                        </div>
+                    </div>
+                    <div className="bg-cyber-light p-8 rounded-xl border border-cyber-gray">
+                        <h2 className="text-xl font-bold text-white mb-4">Useful Links</h2>
+                        <ul className="space-y-2">
+                            <li><a href="https://cppreference.com" target="_blank" className="text-cyber-neon hover:underline">CppReference.com</a></li>
+                            <li><a href="https://isocpp.org" target="_blank" className="text-cyber-neon hover:underline">ISO C++ Standard</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        );
+
+        const AboutPage = () => {
+            const [quote, setQuote] = useState("");
+            
+            const quotes = [
+                "I turned your PDF into this because I knew you wouldn't read it otherwise.",
+                "Coding is 10% typing and 90% scrolling through StackOverflow.",
+                "Your professor probably still uses Turbo C++. Don't tell him I said that.",
+                "If Inheritance is so great, why did I only inherit debt?",
+                "This app was built with 0% logic and 100% caffeine.",
+                "Polymorphism: Because having one personality wasn't confusing enough.",
+                "I promise this code works better than the university portal.",
+                "Remember: It's not a bug, it's an undocumented feature.",
+                "Welcome to the only place where 'killing a child' (process) is acceptable terminology.",
+                "Segfault: The computer's way of saying 'I don't know where I am anymore'.",
+                "Friends are like 'friend functions': they can touch your private parts.",
+                "Why do programmers prefer dark mode? Because light attracts bugs.",
+                "A good programmer looks both ways before crossing a one-way street.",
+                "There are two hard things in CS: Cache invalidation, naming things, and off-by-one errors.",
+                "I am not lazy, I am just on energy saving mode.",
+                "My code doesn't work, I have no idea why. My code works, I have no idea why."
+            ];
+
+            useEffect(() => {
+                setQuote(quotes[Math.floor(Math.random() * quotes.length)]);
+            }, []);
+
+            return (
+                <div className="h-full flex items-center justify-center p-8 bg-[url('https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&q=80')] bg-cover bg-center">
+                    <div className="bg-cyber-black/95 p-12 rounded-3xl border border-cyber-accent/50 shadow-[0_0_50px_rgba(112,0,255,0.4)] text-center max-w-xl backdrop-blur-xl">
+                        <div className="relative inline-block">
+                            <img src="https://ui-avatars.com/api/?name=Talal+Abdullah&background=7000ff&color=fff&size=200" className="w-32 h-32 rounded-full mx-auto mb-6 border-4 border-cyber-neon shadow-xl" />
+                            <div className="absolute bottom-0 right-0 bg-cyber-success text-black text-xs font-bold px-2 py-1 rounded-full">ONLINE</div>
+                        </div>
+                        <h1 className="text-4xl font-black text-white mb-2">Talal Abdullah</h1>
+                        <p className="text-cyber-neon font-mono text-sm mb-2 uppercase tracking-widest">BS IT 2A | Bahria University</p>
+                        <p className="text-cyber-pink font-mono text-xs mb-6 uppercase tracking-widest"><i className="fa-solid fa-gamepad mr-2"></i>Valorant For Life (Hardstuck Plat)</p>
+                        
+                        <div className="bg-cyber-light p-4 rounded-xl border border-cyber-gray mb-8">
+                            <p className="text-gray-300 italic text-sm leading-relaxed">"{quote}"</p>
+                        </div>
+                        
+                        <div className="flex justify-center gap-4">
+                            <a href="https://github.com/TalalAbdullah-1" target="_blank" className="w-10 h-10 rounded bg-gray-800 flex items-center justify-center text-white hover:bg-white hover:text-black transition"><i className="fa-brands fa-github"></i></a>
+                            <a href="https://www.linkedin.com/in/talal-abdullah-243b44371/" target="_blank" className="w-10 h-10 rounded bg-[#0077b5] flex items-center justify-center text-white hover:scale-110 transition"><i className="fa-brands fa-linkedin"></i></a>
+                            <a href="https://instagram.com/111mursh" target="_blank" className="w-10 h-10 rounded bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-500 flex items-center justify-center text-white hover:scale-110 transition"><i className="fa-brands fa-instagram"></i></a>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const AIChat = () => {
+            const [open, setOpen] = useState(false);
+            const [key, setKey] = useState(localStorage.getItem('gemini_key') || '');
+            const [showKeyInput, setShowKeyInput] = useState(false);
+            const [msg, setMsg] = useState("");
+            const [chat, setChat] = useState([{r: 'ai', t: "I'm the OOP Officer. State your business or leave."}]);
+            const [loading, setLoading] = useState(false);
+
+            const saveKey = (val) => {
+                setKey(val);
+                localStorage.setItem('gemini_key', val);
+            };
+
+            const send = async () => {
+                if(!msg) return;
+                const userMsg = msg;
+                setMsg("");
+                setChat(prev => [...prev, {r: 'u', t: userMsg}]);
+                
+                setLoading(true);
+                if (key) {
+                    try {
+                        const reply = await callGemini(userMsg, key);
+                        setChat(prev => [...prev, {r: 'ai', t: reply}]);
+                    } catch (e) {
+                        setChat(prev => [...prev, {r: 'ai', t: "Error: " + e.message}]);
+                    }
+                } else {
+                    // Fallback Simulation
+                    setTimeout(() => {
+                        const responses = [
+                            "Did you even try Googling that? (Enter API Key for real answers)",
+                            "That's in Module 4. Do I look like a search engine? (Add Gemini Key in settings)",
+                            "Interesting question. The answer is: Read the docs. (API Key missing)",
+                            "Syntax error in your logic, human. (Enable AI in settings)",
+                            "I'd help, but I'm compiling. (Gemini Key required)"
+                        ];
+                        const reply = responses[Math.floor(Math.random() * responses.length)];
+                        setChat(prev => [...prev, {r: 'ai', t: reply}]);
+                    }, 1000);
+                }
+                setLoading(false);
+            };
+
+            if (!open) return <button onClick={() => setOpen(true)} className="fixed bottom-6 right-6 w-14 h-14 bg-cyber-accent text-white rounded-full text-2xl shadow-lg hover:scale-110 transition z-50 flex items-center justify-center"><i className="fa-solid fa-user-secret"></i></button>;
+
+            return (
+                <div className="fixed bottom-6 right-6 w-80 h-[500px] bg-cyber-dark border border-gray-700 rounded-2xl shadow-2xl flex flex-col z-50 overflow-hidden font-sans">
+                    <div className="p-3 bg-cyber-accent text-white flex justify-between items-center font-bold">
+                        <span className="flex items-center gap-2"><i className="fa-solid fa-user-secret"></i> OOP Officer</span>
+                        <div className="flex gap-2">
+                            <button onClick={() => setShowKeyInput(!showKeyInput)} title="Settings"><i className="fa-solid fa-gear hover:rotate-90 transition"></i></button>
+                            <button onClick={() => setOpen(false)}><i className="fa-solid fa-xmark"></i></button>
+                        </div>
+                    </div>
+                    
+                    {showKeyInput && (
+                        <div className="p-2 bg-gray-800 border-b border-gray-700">
+                            <input 
+                                type="password" 
+                                value={key} 
+                                onChange={(e) => saveKey(e.target.value)} 
+                                placeholder="Enter Gemini API Key..." 
+                                className="w-full bg-black text-white text-xs p-2 rounded border border-gray-600 focus:border-cyber-neon outline-none"
+                            />
+                            <p className="text-[10px] text-gray-400 mt-1">Key saved locally. Get one from Google AI Studio.</p>
+                        </div>
+                    )}
+
+                    <div className="flex-1 p-3 overflow-y-auto space-y-2 bg-[#121212]">
+                        {chat.map((c, i) => (
+                            <div key={i} className={`p-2 rounded text-xs max-w-[85%] ${c.r === 'u' ? 'bg-cyber-neon text-black ml-auto' : 'bg-gray-800 text-gray-300'}`}>{c.t}</div>
+                        ))}
+                        {loading && <div className="text-xs text-cyber-accent animate-pulse">Officer is thinking...</div>}
+                    </div>
+                    <div className="p-2 bg-[#121212] border-t border-gray-800 flex gap-2">
+                        <input value={msg} onChange={e => setMsg(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} className="flex-1 bg-gray-900 text-white text-xs p-2 rounded focus:outline-none" placeholder="Ask the officer..." />
+                        <button onClick={send} className="text-cyber-accent"><i className="fa-solid fa-paper-plane"></i></button>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [view, setView] = useState('home'); 
+            const [activeModule, setActiveModule] = useState(1);
+            const [menuOpen, setMenuOpen] = useState(true);
+
+            return (
+                <div className="flex h-screen w-full bg-cyber-black text-gray-300 selection:bg-cyber-pink selection:text-white">
+                    <Sidebar isOpen={menuOpen} toggle={() => setMenuOpen(!menuOpen)} active={activeModule} setActive={setActiveModule} setView={setView} />
+                    <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+                        <Navbar view={view} setView={setView} />
+                        {view === 'home' && <HomePage setView={setView} />}
+                        {view === 'learn' && <LearningView activeId={activeModule} />}
+                        {view === 'project' && <ProjectLab />}
+                        {view === 'game' && <GameMode />}
+                        {view === 'exam' && <ExamSim />}
+                        {view === 'resources' && <ResourcesView />}
+                        {view === 'about' && <AboutPage />}
+                        <AIChat />
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

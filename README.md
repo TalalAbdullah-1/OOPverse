@@ -1,4 +1,4 @@
-# OOPverse use this link and and enjoy https://talalabdullah-1.github.io/OOPverse/
+# OOPverse (use this link and and enjoy https://talalabdullah-1.github.io/OOPverse/)
 
 "Because reading 500 university slides is a violation of the Geneva Convention."
 
